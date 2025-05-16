@@ -13,7 +13,8 @@ Lander::Lander() {
 }
 
 void Lander::integrate() { 
-    float dt = 1.0 / ofGetFrameRate();      // interval for this step
+    float dt = ofGetLastFrameTime();      // interval for this step
+    dt = ofClamp(dt, 0.0f, 0.1f); 
 
     position += (velocity * dt);            // update position based on velocity
 

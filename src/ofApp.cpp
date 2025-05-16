@@ -95,6 +95,8 @@ void ofApp::setup(){
 	// set up gui
 	gui.setup();
 	bHide = false;
+    
+    resetGameParams();
 
 	// load background image, fonts (for larger size), and sounds
     background.load("images/water1.jpg");
@@ -103,7 +105,34 @@ void ofApp::setup(){
 	gameOverWon.load("sounds/gameOverWon.mp3");
 	gameOverNeutral.load("sounds/gameOverNeutral.mp3");
     gameOverLost.load("sounds/gameOverLost.mp3");
+    loadLanderModel();
+}
 
+//--------------------------------------------------------------
+void ofApp::loadLanderModel() {
+    string balloonPath = "geo/balloon_model2.obj";
+    if (lander.model.load(balloonPath)) {
+        lander.model.setScaleNormalization(false);
+        lander.model.setScale(10, 10, 10);
+
+        // position above the terrain
+        glm::vec3 startPos(0, 100, 0);
+        lander.model.setPosition(startPos.x, startPos.y, startPos.z);
+        lander.position = startPos;
+        bLanderLoaded = true;
+
+        // rebuild collision bounds
+        bboxList.clear();
+        for (int i = 0; i < lander.model.getMeshCount(); ++i) {
+            bboxList.push_back(Octree::meshBounds(lander.model.getMesh(i)));
+        }
+        // reset cameras
+        extraCamsInitialized = false;
+
+        cout << "Balloon auto-loaded from " << balloonPath << endl;
+    } else {
+        cout << "Failed to load balloon model: " << balloonPath << endl;
+    }
 }
  
 //--------------------------------------------------------------
@@ -940,6 +969,7 @@ glm::vec3 ofApp::getMousePointOnPlane(glm::vec3 planePt, glm::vec3 planeNorm) {
 void ofApp::startThrust() {
 	if (fuelRemaining > 0.0) {
 		isThrusting = true;
+        thrustForce->thrustOn = true;
 		lastThrustTime = ofGetElapsedTimef();
 	}
 }
@@ -952,6 +982,7 @@ void ofApp::stopThrust() {
 			fuelRemaining = 0;
 		}
 		isThrusting = false;
+        thrustForce->thrustOn = false;
 	}
 }
 
@@ -986,4 +1017,5 @@ void ofApp::resetGameParams() {
 	gameNeutralPlayed = false;
 	gameLostPlayed = false;
 	showEndScreen = false;
+    loadLanderModel();
 }
