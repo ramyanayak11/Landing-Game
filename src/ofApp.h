@@ -21,7 +21,7 @@ class ofApp : public ofBaseApp{
 		void setup();
 		void update();
 		void draw();
-        void exit();
+		void exit();
 
 		void keyPressed(int key);
 		void keyReleased(int key);
@@ -45,13 +45,14 @@ class ofApp : public ofBaseApp{
 		bool mouseIntersectPlane(ofVec3f planePoint, ofVec3f planeNorm, ofVec3f &point);
 		bool raySelectWithOctree(ofVec3f &pointRet);
 		glm::vec3 getMousePointOnPlane(glm::vec3 p , glm::vec3 n);
-        void loadLanderModel(); 
+		void loadLanderModel();
 
 
 		void startThrust();
 		void stopThrust();
 		void rotateHeading(float degrees);
 		bool getTerrainHeight(const glm::vec3& position, float& height);
+		float getHighestPoint(const ofMesh& mesh, const vector<int>& indices);
 		void keepOnSurface();
 		void resetGameParams();
 
@@ -106,21 +107,14 @@ class ofApp : public ofBaseApp{
 		bool isThrusting = false;
 
 		// altitude
-		float altitude;
+		float altitude = 0.0;
 		bool aboveTerrain = false;
 		bool showAltitude = true;
-
-		// gameplay
-		bool intersectedTerrain = false;
-		bool gameInSession = true;
-		bool showEndScreen = false;
-		string landingStatus = "";
-		float landingTime = 0.0;
 
 		// forces
 		ThrustForce *thrustForce;
 		GravityForce *gravityForce;
-        ParticleEmitter *exhaustEmitter;
+		ParticleEmitter *exhaustEmitter;
 		float gravity = 0.05;
 
 		// lander movement + rotation
@@ -133,6 +127,21 @@ class ofApp : public ofBaseApp{
 		bool rotLeft = false;
 		bool rotRight = false;
 
+		// gameplay
+		bool intersectedTerrain = false;
+		bool gameInSession = false;
+		bool showStartScreen = true;
+		bool showEndScreen = false;
+		string landingStatus = "";
+		float landingTime = 0.0;
+		int playerPoints = 0;
+
+		// landing
+		ofMesh landingEasy, landingMedium, landingHard;
+		Octree easyOct, mediumOct, hardOct;
+		string landingLocation;
+		bool hitEasy, hitMedium, hitHard, hitTerrain;
+
 		// background image
 		ofImage background;
 
@@ -140,17 +149,13 @@ class ofApp : public ofBaseApp{
 		ofTrueTypeFont boldFont;			// for bigger lettering
 		ofTrueTypeFont largeFont;
 
-		// sounds (play once)
+		// sounds
+		ofSoundPlayer thrustingSound;
 		ofSoundPlayer gameOverWon;
 		ofSoundPlayer gameOverNeutral;
 		ofSoundPlayer gameOverLost;
-		bool gameWonPlayed = false;
+		bool gameWonPlayed = false;			// flags to play once
 		bool gameNeutralPlayed = false;
 		bool gameLostPlayed = false;
 
-		// landing
-		ofMesh landingEasy, landingMedium, landingHard;
-		Octree easyOct, mediumOct, hardOct;
-		string landingLocation;
-		bool hitEasy, hitMedium, hitHard, hitTerrain;
 };

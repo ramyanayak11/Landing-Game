@@ -4,6 +4,7 @@
 
 #include "ofApp.h"
 #include "Util.h"
+#include <string>
 
 //--------------------------------------------------------------
 // setup scene, lighting, state and load geometry
@@ -92,26 +93,27 @@ void ofApp::setup(){
 	// forces
 	thrustForce = new ThrustForce(glm::vec3(0, 0, 0));
 	gravityForce = new GravityForce(glm::vec3(0, 0, 0));
-    
+
 	// exhaust emitter
-    if(exhaustEmitter) 
+	if(exhaustEmitter) 
         delete exhaustEmitter;
     exhaustEmitter = new ParticleEmitter(3000, 800.0f);
-	
+
 	// set up gui
 	gui.setup();
 	bHide = false;
-    
-    resetGameParams();
+
+	resetGameParams(); 
 
 	// load background image, fonts (for larger size), and sounds
     background.load("images/water1.jpg");
 	boldFont.load("fonts/futura_book.otf", 14);
 	largeFont.load("fonts/futura_book.otf", 20);
+	thrustingSound.load("sounds/thrust.wav");
 	gameOverWon.load("sounds/gameOverWon.mp3");
 	gameOverNeutral.load("sounds/gameOverNeutral.mp3");
     gameOverLost.load("sounds/gameOverLost.mp3");
-    loadLanderModel();
+	loadLanderModel();
 }
 
 //--------------------------------------------------------------
@@ -153,7 +155,7 @@ void ofApp::update() {
 		}
 	}
 
-	// initialize lander-dependent cameras once lander has been loaded
+	// initialize lander-dependent cameras once the lander has been loaded
 	//
 	if (bLanderLoaded && !extraCamsInitialized) {
 		trackingCam.setPosition(glm::vec3(-150, 100, -150));
@@ -203,7 +205,7 @@ void ofApp::update() {
 
 
 	if (bLanderLoaded) {
-        float dt = ofGetLastFrameTime();
+		float dt = ofGetLastFrameTime();
         // emit from the back of the lander
         glm::vec3 emitPos = lander.position + lander.heading * -1.0f;
         exhaustEmitter->setEmitterPosition(emitPos);
@@ -240,60 +242,100 @@ void ofApp::update() {
 		ofVec3f max = lander.model.getSceneMax() + lander.model.getPosition();
 		Box bounds = Box(Vector3(min.x, min.y, min.z), Vector3(max.x, max.y, max.z));
 
+		hitEasy = hitMedium = hitHard = hitTerrain = false;
+
 		// check each landing area
         colBoxList.clear();
         easyOct.intersect(bounds, easyOct.root, colBoxList, collidingLeafBoxes);
         hitEasy = colBoxList.size() >= 1;
-		if (hitEasy) { landingLocation = "easyPad"; }
+		if (hitEasy) { landingLocation = "Easy Landing Pad"; }
 
         colBoxList.clear();
         mediumOct.intersect(bounds, mediumOct.root, colBoxList, collidingLeafBoxes);
         hitMedium = colBoxList.size() >= 1;
-		if (hitMedium) { landingLocation = "mediumPad"; }
+		if (hitMedium) { landingLocation = "Medium Landing Pad"; }
 
         colBoxList.clear();
         hardOct.intersect(bounds, hardOct.root, colBoxList, collidingLeafBoxes);
         hitHard = colBoxList.size() >= 1;
-		if (hitHard) { landingLocation = "hardPad"; }
+		if (hitHard) { landingLocation = "Hard Landing Pad"; }
 
-        // check main terrain (if not already landed)
-        if (!hitEasy && !hitMedium && !hitHard && altitude == 0.0) {
+		// check main terrain (if not already landed on specified pad)
+		if (!hitEasy && !hitMedium && !hitHard && altitude <= 0.0) {
 			colBoxList.clear();
 			terrainOctree.intersect(bounds, terrainOctree.root, colBoxList, collidingLeafBoxes);
 			hitTerrain = colBoxList.size() >= 20;
 			if (hitTerrain) { landingLocation = "other"; }
 		}
-
+        
 
 		if ((hitEasy || hitMedium || hitHard || hitTerrain) && !intersectedTerrain) {
 			intersectedTerrain = true;
 
-			keepOnSurface();														// to prevent lander going through the terrain
+			// calculate bounce before stopping on surface
+			float impactSpeed = abs(lander.velocity.y);
+			float bounceIntensity = 0.5f;
+			
+			// apply bounce effect (reverse and reduce velocity)
+			lander.velocity.y = -lander.velocity.y * bounceIntensity;
 
-			// apply impulse force (bounce effect) after landing
-    		lander.velocity.y *= -0.2;  // dampen vertical velocity
+			keepOnSurface();														// to prevent lander going through the terrain
 
 			float speed = abs(lander.velocity.y);
 			if (hitEasy || hitMedium || hitHard) {
 				if (speed < 8.0) {
 					landingStatus = "correct";
+					playerPoints = 50;
 				}
 				else {
 					landingStatus = "hard";
+					playerPoints = 20;
 				}
 			}
 			else if (hitTerrain) {
 				landingStatus = "crash";
+				playerPoints = 0;
 			}
-
+			
 			cout << "balloon intersected terrain at speed: " << speed << endl;
 			cout << "balloon landed on: " << landingLocation << endl;
 
-			landingTime = ofGetElapsedTimef();
-            gameInSession = false;
+			if (hitEasy || hitMedium || hitHard) {
+				if (abs(lander.velocity.y) < 0.1f) { 				// only end when nearly stopped
+					landingTime = ofGetElapsedTimef();
+					gameInSession = false;
+					lander.forceList.clear();						// clear all forces (lander shouldn't move after landing)
+					lander.velocity = glm::vec3(0);
+				}
+			}
+			else {
+				landingTime = ofGetElapsedTimef();
+				gameInSession = false;
+				lander.forceList.clear();						// clear all forces (lander shouldn't move after landing)
+				lander.velocity = glm::vec3(0);
+			}
+			
+		}
 
-			lander.forceList.clear();												// clear all forces (lander shouldn't move after landing)
-			lander.velocity = glm::vec3(0);
+
+		if (intersectedTerrain && gameInSession) {
+			// reduced gravity during bounce
+			gravityForce->gravity.y = -gravity * 0.3f;
+			lander.forceList.push_back(gravityForce);
+			
+			// keep lander above surface during bounce
+			keepOnSurface();
+			
+			// check if lander has stopped
+			if (abs(lander.velocity.y) < 0.1f && altitude < 0.2f) {
+				gameInSession = false;
+				landingTime = ofGetElapsedTimef();
+				lander.forceList.clear();
+				lander.velocity = glm::vec3(0);
+				
+				// final surface alignment
+				keepOnSurface();
+			}
 		}
 		
 
@@ -350,7 +392,32 @@ void ofApp::update() {
 //--------------------------------------------------------------
 void ofApp::draw() {
 
-	if (!gameInSession && showEndScreen) {	// shows game ending screen
+	if (showStartScreen) {
+		ofDisableDepthTest();
+		ofSetBackgroundColor(164, 195, 210);	// pastel blue
+		ofSetColor(ofColor::black);
+
+		float width = ofGetWindowWidth();
+		float height = ofGetWindowHeight();
+
+		string gameTitle = "Balloon Landing Game";
+		string instructions = "Instructions";
+		string instr1 = "EASY CHALLENGE: Land on the yellow landing pad";
+		string instr2 = "MEDIUM CHALLENGE: Land on the orange landing pad";
+		string instr3 = "HARD CHALLENGE: Land on the red landing pad";
+		string playLine = "press 'spacebar' to play";
+		string quitLine = "press 'q' to quit the game";
+
+		largeFont.drawString(gameTitle, width/2 - largeFont.stringWidth(gameTitle)/2, height/2 - 100);
+		boldFont.drawString(instructions, width/2 - boldFont.stringWidth(instructions)/2, height/2 - 40);
+		boldFont.drawString(instr1, width/2 - boldFont.stringWidth(instr1)/2, height/2 - 0);
+		boldFont.drawString(instr2, width/2 - boldFont.stringWidth(instr2)/2, height/2 + 40);
+		boldFont.drawString(instr3, width/2 - boldFont.stringWidth(instr3)/2, height/2 + 80);
+		boldFont.drawString(playLine, width/2 - boldFont.stringWidth(playLine)/2, height/2 + 160);
+		boldFont.drawString(quitLine, width/2 - boldFont.stringWidth(quitLine)/2, height/2 + 200);
+
+	}
+	else if (!gameInSession && showEndScreen) {	// shows game ending screen
 
 		if (!landingStatus.empty()) {
 			ofDisableDepthTest();
@@ -362,7 +429,7 @@ void ofApp::draw() {
 
 			if (landingStatus == "correct") {					// correct landing
 				string line1 = "--- Congratulations! ---";
-				string line2 = "You landed correctly!";
+				string line2 = "You landed correctly at the " +  landingLocation + "!";
 
 				largeFont.drawString(line1, width/2 - largeFont.stringWidth(line1)/2, height/2 - 60);
 				largeFont.drawString(line2, width/2 - largeFont.stringWidth(line2)/2, height/2);
@@ -404,12 +471,16 @@ void ofApp::draw() {
 				largeFont.drawString(line3, width/2 - largeFont.stringWidth(line3)/2, height/2);
 			}
 
+			if (landingStatus != "quit") {
+				string showPoints = "Points earned: " + to_string(playerPoints);
+				largeFont.drawString(showPoints, width/2 - largeFont.stringWidth(showPoints)/2, height/2 + 40);
+			}
 
 			string playAgain = "press 'spacebar' to play again";
 			string quit = "press 'q' to quit the game";
 
-			boldFont.drawString(playAgain, width/2 - boldFont.stringWidth(playAgain)/2, height/2 + 100);
-			boldFont.drawString(quit, width/2 - boldFont.stringWidth(quit)/2, height/2 + 130);
+			boldFont.drawString(playAgain, width/2 - boldFont.stringWidth(playAgain)/2, height/2 + 140);
+			boldFont.drawString(quit, width/2 - boldFont.stringWidth(quit)/2, height/2 + 170);
 		}
 	}
 	else {
@@ -445,7 +516,7 @@ void ofApp::draw() {
 			ofMesh mesh;
 			if (bLanderLoaded) {
 				lander.model.drawFaces();
-                exhaustEmitter->draw(currCam->getModelViewProjectionMatrix());
+				exhaustEmitter->draw(currCam->getModelViewProjectionMatrix());
 				ofSetColor(ofColor::white);
 
 				if (!bTerrainSelected) drawAxis(lander.model.getPosition());
@@ -572,7 +643,8 @@ void ofApp::keyPressed(int key) {
 		bDisplayOctree = !bDisplayOctree;
 		break;
 	case 'q':								// press q to exit
-		if (gameInSession) {
+		if (gameInSession || showStartScreen) {
+			showStartScreen = false;
 			gameInSession = false;
 			landingStatus = "quit";
 		}
@@ -599,8 +671,12 @@ void ofApp::keyPressed(int key) {
 		toggleWireframeMode();
 		break;
 	case ' ':
-		if (!gameInSession) {				// reset all variables when game restarts
-			resetGameParams();
+		if (!gameInSession && showStartScreen) {
+			showStartScreen = false;
+			gameInSession = true;
+		}
+		else if (!gameInSession && showEndScreen) {	// if player wants to play again,
+			resetGameParams();					// reset all game variables
 			gameInSession = true;
 		}
 		break;
@@ -974,7 +1050,8 @@ glm::vec3 ofApp::getMousePointOnPlane(glm::vec3 planePt, glm::vec3 planeNorm) {
 void ofApp::startThrust() {
 	if (fuelRemaining > 0.0) {
 		isThrusting = true;
-        thrustForce->thrustOn = true;
+		thrustForce->thrustOn = true;
+		thrustingSound.play();
 		lastThrustTime = ofGetElapsedTimef();
 	}
 }
@@ -989,7 +1066,7 @@ void ofApp::stopThrust() {
 			fuelRemaining = 0;
 		}
 		isThrusting = false;
-        thrustForce->thrustOn = false;
+		thrustForce->thrustOn = false;
 	}
 }
 
@@ -1005,40 +1082,67 @@ void ofApp::rotateHeading(float degrees) {
 //
 bool ofApp::getTerrainHeight(const glm::vec3& position, float& height) {
 
-    Ray ray(Vector3(position.x, position.y + 100.0f, position.z), Vector3(0, -1, 0));
+	Ray ray(Vector3(position.x, position.y + 100.0f, position.z), Vector3(0, -1, 0));
     TreeNode nodeHit;
+    
+    if (easyOct.intersect(ray, easyOct.root, nodeHit)) {
+        const ofMesh& mesh = terrain.getMesh("IslandField Landing_EASY");
+        const vector<int>& indices = nodeHit.points;
+        height = getHighestPoint(mesh, indices);
+        return true;
+    }
+    
+    if (mediumOct.intersect(ray, mediumOct.root, nodeHit)) {
+        const ofMesh& mesh = terrain.getMesh("IslandField Landing_MEDIUM");
+        const vector<int>& indices = nodeHit.points;
+        height = getHighestPoint(mesh, indices);
+        return true;
+    }
+    
+    if (hardOct.intersect(ray, hardOct.root, nodeHit)) {
+        const ofMesh& mesh = terrain.getMesh("IslandField Landing_HARD");
+        const vector<int>& indices = nodeHit.points;
+        height = getHighestPoint(mesh, indices);
+        return true;
+    }
     
     if (terrainOctree.intersect(ray, terrainOctree.root, nodeHit)) {
         const ofMesh& mesh = terrain.getMesh(1);
         const vector<int>& indices = nodeHit.points;
-        
-        float maxY = -FLT_MAX;
-        for (int i = 0; i < indices.size(); ++i) {				// find highest point in this node (closest where the ray starts)
-            glm::vec3 vert = mesh.getVertex(indices[i]);
-            if (vert.y > maxY) {
-                maxY = vert.y;
-            }
-        }
-        
-        height = maxY;
+        height = getHighestPoint(mesh, indices);
         return true;
     }
-    return false;
+
+	return false;
+}
+
+// gets highest point on the terrain
+//
+float ofApp::getHighestPoint(const ofMesh& mesh, const vector<int>& indices) {
+    float maxY = -FLT_MAX;  // Start with very small number
+    for (int i = 0; i < indices.size(); ++i) {
+        glm::vec3 vert = mesh.getVertex(indices[i]);
+        if (vert.y > maxY) {
+            maxY = vert.y;  // Update if we find a higher point
+        }
+    }
+    return maxY;
 }
 
 // prevent lander from passing through the terrain
 //
 void ofApp::keepOnSurface() {
-    Ray ray(Vector3(lander.position.x, lander.position.y + 100, lander.position.z), Vector3(0, -1, 0));	// ray straight down from lander
-    TreeNode node;
-    
-    if (terrainOctree.intersect(ray, terrainOctree.root, node)) {
-        glm::vec3 surfacePoint(node.box.center().x(), node.box.center().y(), node.box.center().z());	// get exact intersection point
+    float terrainHeight;
+    if (getTerrainHeight(lander.position, terrainHeight)) {
+        float landerBottom = lander.model.getSceneMin().y + lander.position.y;
+        float penetration = terrainHeight - landerBottom;
         
-        float landerBottom = lander.model.getSceneMin().y + lander.model.getPosition().y;				// adjust lander pos to sit on the surface
-        float offset = landerBottom - surfacePoint.y;													// rather than going through
-        lander.position.y -= offset;
-        lander.updateModelPosition();
+        if (penetration > 0) { 									// only push up if moving downward
+            if (lander.velocity.y <= 0) {
+                lander.position.y += penetration + 0.01f;
+                lander.updateModelPosition();
+            }
+        }
     }
 }
 
@@ -1065,12 +1169,14 @@ void ofApp::resetGameParams() {
 	hitTerrain = false;
 	landingLocation = "";
 
+	playerPoints = 0;
+
 	gameWonPlayed = false;
 	gameNeutralPlayed = false;
 	gameLostPlayed = false;
 	showEndScreen = false;
 
-    loadLanderModel();
+	loadLanderModel();
 }
 
 void ofApp::exit(){
