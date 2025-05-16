@@ -1,8 +1,9 @@
+// Team Members: Ramya Nayak, Sanjana Nagwekar
+// CS 134 - Final Project
+// May 16, 2025
 
 #include "ofApp.h"
 #include "Util.h"
-
-#include <queue>
 
 //--------------------------------------------------------------
 // setup scene, lighting, state and load geometry
@@ -92,9 +93,11 @@ void ofApp::setup(){
 	thrustForce = new ThrustForce(glm::vec3(0, 0, 0));
 	gravityForce = new GravityForce(glm::vec3(0, 0, 0));
     
+	// exhaust emitter
     if(exhaustEmitter) 
         delete exhaustEmitter;
     exhaustEmitter = new ParticleEmitter(3000, 800.0f);
+	
 	// set up gui
 	gui.setup();
 	bHide = false;
@@ -141,7 +144,9 @@ void ofApp::loadLanderModel() {
 //--------------------------------------------------------------
 void ofApp::update() { 
 
-	if (!gameInSession && !showEndScreen) {
+	// gameplay
+	//
+	if (!gameInSession && !showEndScreen) {						// show game end screen 3.0 seconds after landing
 		float currTime = ofGetElapsedTimef();
 		if (currTime - landingTime >= 3.0) {
 			showEndScreen = true;
@@ -149,6 +154,7 @@ void ofApp::update() {
 	}
 
 	// initialize lander-dependent cameras once lander has been loaded
+	//
 	if (bLanderLoaded && !extraCamsInitialized) {
 		trackingCam.setPosition(glm::vec3(-150, 100, -150));
 		trackingCam.lookAt(lander.position);
@@ -169,6 +175,7 @@ void ofApp::update() {
 	glm::vec3 left = glm::normalize(glm::cross(lander.heading, up));
 
 	// updating thrust
+	//
 	if (moveUp) {
 		thrustForce->thrust += up * thrustAmt;
 		moved = true;
@@ -203,6 +210,7 @@ void ofApp::update() {
         exhaustEmitter->update(dt, thrustForce->thrustOn);
 
 		// moving the lander
+		//
 		if (moved && !intersectedTerrain) {						// don't move anymore if lander has landed
 
 			gravityForce->gravity.y += -gravity;				// if gravity applied in only -y, lander goes diagonal when moved left/right
@@ -212,81 +220,69 @@ void ofApp::update() {
 		}
 
 
-
 		// getting the lander's altitude
-		glm::vec3 lPos = lander.position;
-		Ray straightDown(Vector3(lPos.x, lPos.y, lPos.z), Vector3(0, -1, 0));		// ray straight down from lander
-		TreeNode nodeHit;
-
-		if (terrainOctree.intersect(straightDown, terrainOctree.root, nodeHit)) {				// if there's a terrain below the lander
-			const ofMesh& mesh = terrain.getMesh(1);
-			const vector<int>& indices = nodeHit.points;							// get indices of hit node
-
-			float minDistance = FLT_MAX;			
-			glm::vec3 closestPoint;
-
-			for (int i = 0; i < indices.size(); ++i) {								// find closest vertex in node to lander
-				glm::vec3 vert = mesh.getVertex(indices[i]);
-				float dist = glm::distance(lander.position, vert);
-
-				if (dist < minDistance) {
-					minDistance = dist;
-					closestPoint = vert;
-				}
-			}
-
-			altitude = glm::distance(lander.position, closestPoint);				// get distance from lander to that vertex
+		//
+		float terrainHeight;
+		if (getTerrainHeight(lander.position, terrainHeight)) {
+			float landerMinPoint = lander.model.getSceneMin().y + lander.position.y;
+			altitude = landerMinPoint - terrainHeight;
 			aboveTerrain = true;
 		}
 		else {
 			aboveTerrain = false;
+
 		}
 
 
+		// collision detection
+		//
 		ofVec3f min = lander.model.getSceneMin() + lander.model.getPosition();
 		ofVec3f max = lander.model.getSceneMax() + lander.model.getPosition();
-
 		Box bounds = Box(Vector3(min.x, min.y, min.z), Vector3(max.x, max.y, max.z));
 
 		// check each landing area
         colBoxList.clear();
         easyOct.intersect(bounds, easyOct.root, colBoxList, collidingLeafBoxes);
-        hitEasy = colBoxList.size() >= 20;
+        hitEasy = colBoxList.size() >= 1;
 		if (hitEasy) { landingLocation = "easyPad"; }
 
         colBoxList.clear();
         mediumOct.intersect(bounds, mediumOct.root, colBoxList, collidingLeafBoxes);
-        hitMedium = colBoxList.size() >= 20;
+        hitMedium = colBoxList.size() >= 1;
 		if (hitMedium) { landingLocation = "mediumPad"; }
 
         colBoxList.clear();
         hardOct.intersect(bounds, hardOct.root, colBoxList, collidingLeafBoxes);
-        hitHard = colBoxList.size() >= 20;
+        hitHard = colBoxList.size() >= 1;
 		if (hitHard) { landingLocation = "hardPad"; }
 
         // check main terrain (if not already landed)
-        colBoxList.clear();
-        terrainOctree.intersect(bounds, terrainOctree.root, colBoxList, collidingLeafBoxes);
-        hitTerrain = colBoxList.size() >= 20;
-		if (!hitEasy && !hitMedium && !hitHard && hitTerrain) { landingLocation = "other"; }
+        if (!hitEasy && !hitMedium && !hitHard && altitude == 0.0) {
+			colBoxList.clear();
+			terrainOctree.intersect(bounds, terrainOctree.root, colBoxList, collidingLeafBoxes);
+			hitTerrain = colBoxList.size() >= 20;
+			if (hitTerrain) { landingLocation = "other"; }
+		}
 
 
 		if ((hitEasy || hitMedium || hitHard || hitTerrain) && !intersectedTerrain) {
 			intersectedTerrain = true;
 
-			glm::vec3 landingPos = lander.model.getPosition();
-            glm::vec3 reverseDir = landingPos + glm::vec3(0, 1, 0) * 1.0;
-            lander.position = reverseDir;
-            lander.updateModelPosition();
+			keepOnSurface();														// to prevent lander going through the terrain
+
+			// apply impulse force (bounce effect) after landing
+    		lander.velocity.y *= -0.2;  // dampen vertical velocity
 
 			float speed = abs(lander.velocity.y);
-			if (speed < 10.0) {
-				landingStatus = "correct";
+			if (hitEasy || hitMedium || hitHard) {
+				if (speed < 8.0) {
+					landingStatus = "correct";
+				}
+				else {
+					landingStatus = "hard";
+				}
 			}
-			else if (speed < 10.0) {
-				landingStatus = "hard";
-			}
-			else {
+			else if (hitTerrain) {
 				landingStatus = "crash";
 			}
 
@@ -296,6 +292,8 @@ void ofApp::update() {
 			landingTime = ofGetElapsedTimef();
             gameInSession = false;
 
+			lander.forceList.clear();												// clear all forces (lander shouldn't move after landing)
+			lander.velocity = glm::vec3(0);
 		}
 		
 
@@ -304,12 +302,8 @@ void ofApp::update() {
 			gameInSession = false;
 		}
 
-
-
 		// update lander
 		lander.update();
-
-
 
 		// update cameras dependent on the lander
 		//
@@ -455,18 +449,6 @@ void ofApp::draw() {
 				ofSetColor(ofColor::white);
 
 				if (!bTerrainSelected) drawAxis(lander.model.getPosition());
-
-				/* ------------------------ draws the lander's bounding box
-				if (bLanderSelected) {
-
-					ofVec3f min = lander.model.getSceneMin() + lander.model.getPosition();
-					ofVec3f max = lander.model.getSceneMax() + lander.model.getPosition();
-
-					Box bounds = Box(Vector3(min.x, min.y, min.z), Vector3(max.x, max.y, max.z));
-					ofSetColor(ofColor::white);
-					Octree::drawBox(bounds);
-				}
-				*/
 			}
 		}
 		if (bTerrainSelected) drawAxis(ofVec3f(0, 0, 0));
@@ -480,8 +462,10 @@ void ofApp::draw() {
 			ofNoFill();
 			ofSetColor(ofColor::white);
 
-			terrainOctree.drawLeafNodes(terrainOctree.root);
-
+			//terrainOctree.drawLeafNodes(terrainOctree.root);
+			easyOct.draw(3, 0);
+			mediumOct.draw(3, 0);
+			hardOct.draw(3, 0);
 		}
 
 
@@ -549,8 +533,10 @@ void ofApp::keyPressed(int key) {
 		break;
 	case 'B':
 	case 'b':								// backward along heading
-		moveBackward = true;
-		startThrust();
+		if (!intersectedTerrain && gameInSession) {
+			moveBackward = true;
+			startThrust();
+		}
 		break;
 	case 'C':
 	case 'c':
@@ -562,8 +548,10 @@ void ofApp::keyPressed(int key) {
 		ofToggleFullscreen();
 		break;
 	case 'f':								// forward along heading
-		moveForward = true;
-		startThrust();
+		if (!intersectedTerrain && gameInSession) {
+			moveForward = true;
+			startThrust();
+		}
 		break;
 	case 'H':
 	case 'h':
@@ -618,7 +606,7 @@ void ofApp::keyPressed(int key) {
 		break;
 	case OF_KEY_F1:
 		currCam = &mainCam;
-		cout << "current camera: cam" << endl;
+		cout << "current camera: mainCam" << endl;
 		break;
 	case OF_KEY_F2:
 		currCam = &trackingCam;
@@ -636,20 +624,28 @@ void ofApp::keyPressed(int key) {
 		bCtrlKeyDown = true;
 		break;
 	case OF_KEY_DOWN:						// down
-		moveDown = true;
-		startThrust();
+		if (!intersectedTerrain && gameInSession) {
+			moveDown = true;
+			startThrust();
+		}
 		break;
 	case OF_KEY_UP:							// up
-		moveUp = true;
-		startThrust();
+		if (!intersectedTerrain && gameInSession) {
+			moveUp = true;
+			startThrust();
+		}
 		break;
 	case OF_KEY_LEFT:						// left
-		moveLeft = true;
-		startThrust();
+		if (!intersectedTerrain && gameInSession) {
+			moveLeft = true;
+			startThrust();
+		}
 		break;
 	case OF_KEY_RIGHT:						// right
-		moveRight = true;
-		startThrust();
+		if (!intersectedTerrain && gameInSession) {
+			moveRight = true;
+			startThrust();
+		}
 		break;
 	default:
 		break;
@@ -836,8 +832,6 @@ void ofApp::gotMessage(ofMessage msg){
 
 }
 
-
-
 //--------------------------------------------------------------
 // setup basic ambient lighting in GL  (for now, enable just 1 light)
 //
@@ -972,9 +966,11 @@ glm::vec3 ofApp::getMousePointOnPlane(glm::vec3 planePt, glm::vec3 planeNorm) {
 	else return glm::vec3(0, 0, 0);
 }
 
+//--------------------------------------------------------------
+//--------------------------------------------------------------
 
-
-
+// start thrusting
+//
 void ofApp::startThrust() {
 	if (fuelRemaining > 0.0) {
 		isThrusting = true;
@@ -983,6 +979,8 @@ void ofApp::startThrust() {
 	}
 }
 
+// stop thrusting and update fuel remaining
+//
 void ofApp::stopThrust() {
 	if (isThrusting) {
 		float currTime = ofGetElapsedTimef();
@@ -995,12 +993,57 @@ void ofApp::stopThrust() {
 	}
 }
 
+// rotate the lander's heading by given degree
+//
 void ofApp::rotateHeading(float degrees) {
 	float radians = glm::radians(degrees);
 	glm::mat4 rot = glm::rotate(glm::mat4(1.0), radians, glm::vec3(0, 1, 0));
 	lander.heading = glm::normalize(glm::vec3(rot * glm::vec4(lander.heading, 0)));
 }
 
+// getting altitude using ray-based collision
+//
+bool ofApp::getTerrainHeight(const glm::vec3& position, float& height) {
+
+    Ray ray(Vector3(position.x, position.y + 100.0f, position.z), Vector3(0, -1, 0));
+    TreeNode nodeHit;
+    
+    if (terrainOctree.intersect(ray, terrainOctree.root, nodeHit)) {
+        const ofMesh& mesh = terrain.getMesh(1);
+        const vector<int>& indices = nodeHit.points;
+        
+        float maxY = -FLT_MAX;
+        for (int i = 0; i < indices.size(); ++i) {				// find highest point in this node (closest where the ray starts)
+            glm::vec3 vert = mesh.getVertex(indices[i]);
+            if (vert.y > maxY) {
+                maxY = vert.y;
+            }
+        }
+        
+        height = maxY;
+        return true;
+    }
+    return false;
+}
+
+// prevent lander from passing through the terrain
+//
+void ofApp::keepOnSurface() {
+    Ray ray(Vector3(lander.position.x, lander.position.y + 100, lander.position.z), Vector3(0, -1, 0));	// ray straight down from lander
+    TreeNode node;
+    
+    if (terrainOctree.intersect(ray, terrainOctree.root, node)) {
+        glm::vec3 surfacePoint(node.box.center().x(), node.box.center().y(), node.box.center().z());	// get exact intersection point
+        
+        float landerBottom = lander.model.getSceneMin().y + lander.model.getPosition().y;				// adjust lander pos to sit on the surface
+        float offset = landerBottom - surfacePoint.y;													// rather than going through
+        lander.position.y -= offset;
+        lander.updateModelPosition();
+    }
+}
+
+// reset game parameters
+//
 void ofApp::resetGameParams() {
 	lander.model.clear();
 	bLanderLoaded = false;
@@ -1026,6 +1069,7 @@ void ofApp::resetGameParams() {
 	gameNeutralPlayed = false;
 	gameLostPlayed = false;
 	showEndScreen = false;
+
     loadLanderModel();
 }
 

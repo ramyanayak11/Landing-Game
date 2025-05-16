@@ -1,9 +1,6 @@
-//
-//  ParticleEmitter.cpp
-//  Landing-Game
-//
-//  Created by Sanjana Nagwekar on 5/16/25.
-//
+// Team Members: Ramya Nayak, Sanjana Nagwekar
+// CS 134 - Final Project
+// May 16, 2025
 
 #include "ParticleEmitter.h"
 

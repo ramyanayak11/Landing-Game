@@ -1,3 +1,6 @@
+// Team Members: Ramya Nayak, Sanjana Nagwekar
+// CS 134 - Final Project
+// May 16, 2025
 
 #include "Force.h"
 #include "Lander.h"

@@ -1,3 +1,6 @@
+// Team Members: Ramya Nayak, Sanjana Nagwekar
+// CS 134 - Final Project
+// May 16, 2025
 
 //--------------------------------------------------------------
 //
@@ -11,7 +14,7 @@
 
 #include "Octree.h"
 
-//draw a box from a "Box" class  
+// draw a box from a "Box" class  
 //
 void Octree::drawBox(const Box &box) {
 	Vector3 min = box.parameters[0];
@@ -161,7 +164,6 @@ void Octree::create(const ofMesh &geo, int numLevels) {
 //      
        
 
-// ------ functions below implemented by Ramya Nayak ------
 
 void Octree::subdivide(const ofMesh &mesh, TreeNode &node, int numLevels, int level) {
 	if (level >= numLevels) return;

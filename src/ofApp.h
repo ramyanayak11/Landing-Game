@@ -1,3 +1,6 @@
+// Team Members: Ramya Nayak, Sanjana Nagwekar
+// CS 134 - Final Project
+// May 16, 2025
 
 #pragma once
 
@@ -48,6 +51,8 @@ class ofApp : public ofBaseApp{
 		void startThrust();
 		void stopThrust();
 		void rotateHeading(float degrees);
+		bool getTerrainHeight(const glm::vec3& position, float& height);
+		void keepOnSurface();
 		void resetGameParams();
 
 
@@ -142,10 +147,6 @@ class ofApp : public ofBaseApp{
 		bool gameWonPlayed = false;
 		bool gameNeutralPlayed = false;
 		bool gameLostPlayed = false;
-
-
-
-
 
 		// landing
 		ofMesh landingEasy, landingMedium, landingHard;

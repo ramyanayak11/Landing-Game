@@ -1,6 +1,8 @@
+// Team Members: Ramya Nayak, Sanjana Nagwekar
+// CS 134 - Final Project
+// May 16, 2025
 
 #include "Lander.h"
-
 
 Lander::Lander() {
     velocity = glm::vec3(0, 0, 0);
