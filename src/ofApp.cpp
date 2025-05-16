@@ -91,7 +91,10 @@ void ofApp::setup(){
 	// forces
 	thrustForce = new ThrustForce(glm::vec3(0, 0, 0));
 	gravityForce = new GravityForce(glm::vec3(0, 0, 0));
-
+    
+    if(exhaustEmitter) 
+        delete exhaustEmitter;
+    exhaustEmitter = new ParticleEmitter(3000, 800.0f);
 	// set up gui
 	gui.setup();
 	bHide = false;
@@ -113,7 +116,7 @@ void ofApp::loadLanderModel() {
     string balloonPath = "geo/balloon_model2.obj";
     if (lander.model.load(balloonPath)) {
         lander.model.setScaleNormalization(false);
-        lander.model.setScale(10, 10, 10);
+        lander.model.setScale(1, 1, 1);
 
         // position above the terrain
         glm::vec3 startPos(0, 100, 0);
@@ -193,6 +196,11 @@ void ofApp::update() {
 
 
 	if (bLanderLoaded) {
+        float dt = ofGetLastFrameTime();
+        // emit from the back of the lander
+        glm::vec3 emitPos = lander.position + lander.heading * -1.0f;
+        exhaustEmitter->setEmitterPosition(emitPos);
+        exhaustEmitter->update(dt, thrustForce->thrustOn);
 
 		// moving the lander
 		if (moved && !intersectedTerrain) {						// don't move anymore if lander has landed
@@ -443,6 +451,7 @@ void ofApp::draw() {
 			ofMesh mesh;
 			if (bLanderLoaded) {
 				lander.model.drawFaces();
+                exhaustEmitter->draw(currCam->getModelViewProjectionMatrix());
 				ofSetColor(ofColor::white);
 
 				if (!bTerrainSelected) drawAxis(lander.model.getPosition());
@@ -1018,4 +1027,8 @@ void ofApp::resetGameParams() {
 	gameLostPlayed = false;
 	showEndScreen = false;
     loadLanderModel();
+}
+
+void ofApp::exit(){
+    delete exhaustEmitter;
 }

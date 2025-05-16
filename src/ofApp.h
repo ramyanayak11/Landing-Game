@@ -8,6 +8,8 @@
 #include "Force.h"
 #include "Lander.h"
 #include <glm/gtx/intersect.hpp>
+#include "ParticleEmitter.h"
+
 using namespace std;
 
 class ofApp : public ofBaseApp{
@@ -16,6 +18,7 @@ class ofApp : public ofBaseApp{
 		void setup();
 		void update();
 		void draw();
+        void exit();
 
 		void keyPressed(int key);
 		void keyReleased(int key);
@@ -112,6 +115,7 @@ class ofApp : public ofBaseApp{
 		// forces
 		ThrustForce *thrustForce;
 		GravityForce *gravityForce;
+        ParticleEmitter *exhaustEmitter;
 		float gravity = 0.05;
 
 		// lander movement + rotation
