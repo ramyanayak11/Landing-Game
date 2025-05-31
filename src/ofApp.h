@@ -140,7 +140,10 @@ class ofApp : public ofBaseApp{
 		ofMesh landingEasy, landingMedium, landingHard;
 		Octree easyOct, mediumOct, hardOct;
 		string landingLocation;
-		bool hitEasy, hitMedium, hitHard, hitTerrain;
+		bool hitEasy, hitMedium, hitHard, hitOther;
+
+		ofMesh waterMesh;
+		Octree waterOct;
 
 		// background image
 		ofImage background;
@@ -157,5 +160,4 @@ class ofApp : public ofBaseApp{
 		bool gameWonPlayed = false;			// flags to play once
 		bool gameNeutralPlayed = false;
 		bool gameLostPlayed = false;
-
 };

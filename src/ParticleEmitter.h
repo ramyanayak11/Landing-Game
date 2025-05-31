@@ -37,4 +37,3 @@ private:
     ofVboMesh        mesh;
     ofShader         shader;
 };
-
